@@ -15,12 +15,15 @@ output:
 always_allow_html: yes
 ---
 
+# The Business Decision 
+
 This dataset summarizes a heterogeneous set of features about articles published by Mashable in a period of two years. The goal is to predict the number of shares in social networks, i.e. how popular any given article is. The dataset is publicly available at [University of California Irvine Machine Learning Repository](http://archive.ics.uci.edu/ml/datasets/Online+News+Popularity)
 
 [Mashable Inc.](http://www.mashable.com) is a digital media website founded in 2005. It has been described as a "one stop shop" for social media. As of November 2015, it has over 6,000,000 Twitter followers and over 3,200,000 fans on Facebook.
 
 ```{r setuplibraries, echo=FALSE, message=FALSE}
 suppressWarnings(source("../INSEADAnalytics/AnalyticsLibraries/library.R"))
+suppressWarnings(source("../INSEADAnalytics/AnalyticsLibraries/heatmapOutput.R"))
 # Package options
 suppressWarnings(ggthemr('fresh'))  # ggplot theme
 opts_knit$set(progress=FALSE, verbose=FALSE)
@@ -58,7 +61,7 @@ ProjectData_INITIAL <- ProjectData
 0. **url:** URL of the article (non-predictive)
 1. **timedelta:** Days between the article publication and the dataset acquisition (non-predictive)
 2. **n_tokens_title:** Number of words in the title 
-3. **n tokens content:** Number of words in the content 
+3. **n_tokens_content** Number of words in the content 
 4. **n_unique_tokens:** Rate of unique words in the content 
 5. **n_non_stop_unique_tokens:** Rate of unique non-stop words in the content 
 6. **num_hrefs:** Number of links 
@@ -86,7 +89,7 @@ ProjectData_INITIAL <- ProjectData
 
 <hr>\clearpage
 
-# Key Customer Characteristics
+# Dimensionality Reduction
 
 ```{r setupfactor, echo=FALSE, tidy=TRUE}
 # Please ENTER then original raw attributes to use. 
@@ -259,7 +262,153 @@ Where,
 
 **DV (Factor) 6:** Number of videos in the article
 
+<hr>\clearpage
+
+By focusing on these six factors, Mashable should be able to better predict whether an article will be shared on social media. Moreover, Mashable can potentially increase the number of shares for each article by setting the value of each of these attributes such that it maximizes the chance that a reader will share that article. 
+
 
 <hr>\clearpage
 
-By focusing on these six factors, Mashable should be able to better predict whether an article will shared on social media. Moreover, Mashable can potentially increase the number of shares for each article by setting the value of each of these attributes such that it maximizes the chance that a reader will share that article. 
+# Cluster Analysis and Segmentation
+
+```{r setup, echo=FALSE, message=FALSE}
+
+# Please ENTER the name of the file with the data used. The file should contain a matrix with one row per observation (e.g. person) and one column per attribute. THE NAME OF THIS MATRIX NEEDS TO BE ProjectData (otherwise you will need to replace the name of the ProjectData variable below with whatever your variable name is, which you can see in your Workspace window after you load your file)
+#datafile_name="Boats" # do not add .csv at the end! make sure the data are numeric!!!! check your file!
+datafile_name3="OnlineNewsPopularity_forSegmentation" # do not add .csv at the end! make sure the data are numeric!!!! check your file!
+
+# Please ENTER then original raw attributes to use for the segmentation (the "segmentation attributes")
+# Please use numbers, not column names, e.g. c(1:5, 7, 8) uses columns 1,2,3,4,5,7,8
+segmentation_attributes_used = c(6, 21, 15, 4, 25, 10) 
+
+# Please ENTER the number of clusters to eventually use for this report
+numb_clusters_used = 3 # for boats possibly use 5, for Mall_Visits use 3
+
+# Please enter the method to use for the segmentation:
+profile_with = "kmeans" #  "hclust" or "kmeans"
+
+# Please ENTER the distance metric eventually used for the clustering in case of hierarchical clustering 
+# (e.g. "euclidean", "maximum", "manhattan", "canberra", "binary" or "minkowski" - see help(dist)). 
+# DEFAULT is "euclidean"
+distance_used="manhattan"
+
+# Please ENTER the hierarchical clustering method to use (options are:
+# "ward", "single", "complete", "average", "mcquitty", "median" or "centroid")
+# DEFAULT is "ward"
+hclust_method = "ward.D"
+
+# Please ENTER the kmeans clustering method to use (options are:
+# "Hartigan-Wong", "Lloyd", "Forgy", "MacQueen"
+# DEFAULT is "Lloyd"
+kmeans_method = "Lloyd"
+
+# Please enter the minimum number below which you would like not to print - this makes the readability of the tables easier. Default values are either 10e6 (to print everything) or 0.5. Try both to see the difference.
+MIN_VALUE=0.5
+
+# Please enter the maximum number of observations to show in the report and slides 
+# (DEFAULT is 50. If the number is large the report and slides may not be generated - very slow or will crash!!)
+max_data_report = 10 # can also chance in server.R
+```
+
+```{r}
+# this loads the selected data: DO NOT EDIT THIS LINE
+ProjectData3 <- read.csv(paste(paste(local_directory, "data", sep="/"), paste(datafile_name3,"csv", sep="."), sep = "/")) # this contains only the matrix ProjectData
+ProjectData3=data.matrix(ProjectData3) 
+if (datafile_name3 == "OnlineNewsPopularity_forSegmentation")
+  colnames(ProjectData3)<-gsub("\\."," ",colnames(ProjectData3))
+
+segmentation_attributes_used = unique(sapply(segmentation_attributes_used,function(i) min(ncol(ProjectData3), max(i,1))))
+
+ProjectData3_segment=ProjectData3[,segmentation_attributes_used]
+# this is the file name where the CLUSTER_IDs of the observations will be saved
+cluster_file = paste(paste(local_directory,"data", sep="/"),paste(paste(datafile_name3,"cluster", sep="_"), "csv", sep="."), sep="/")
+```
+
+## The Data
+
+```{r}
+# let's make the data into data.matrix classes so that we can easier visualize them
+ProjectData3_segment = data.matrix(ProjectData3_segment)
+```
+
+There are a total of 39,565 URLs in the data. Here are the responses for the first `r min(max_data_report,nrow(ProjectData))` URLs based on the six factors we chose in the Dimensionality Reduction stage:
+
+```{r}
+knitr::kable(round(head(ProjectData3_segment, max_data_report), 2))
+```
+
+
+## Summary Statistics
+
+```{r}
+knitr::kable(round(my_summary(ProjectData3_segment),2))
+```
+
+## Scaled Summary Statistics
+
+```{r, echo=FALSE, tidy=TRUE}
+ProjectData3_scaled=apply(ProjectData3_segment,2, function(r) {if (sd(r)!=0) res=(r-mean(r))/sd(r) else res=0*r; res})
+```
+
+```{r}
+knitr::kable(round(my_summary(ProjectData3_scaled),2))
+```
+
+## Using Kmeans Clustering
+
+We use Kmeans clustering to look for 3 clusters using the Lloyd Kmeans method. Here is the cluster membership for the first 10 URLs:
+
+```{r}
+kmeans_clusters <- kmeans(ProjectData3_scaled,centers= numb_clusters_used, iter.max=2000, algorithm=kmeans_method)
+
+ProjectData_with_kmeans_membership <- cbind(1:length(kmeans_clusters$cluster),kmeans_clusters$cluster)
+colnames(ProjectData_with_kmeans_membership)<-c("Observation Number","Cluster_Membership")
+
+knitr::kable(round(head(ProjectData_with_kmeans_membership, max_data_report), 2))
+```
+
+## Interpreting the Segments 
+
+We compare the average responses for each segment with the population average:
+
+```{r}
+cluster_memberships_kmeans <- kmeans_clusters$cluster 
+cluster_ids_kmeans <- unique(cluster_memberships_kmeans)
+
+if (profile_with == "hclust"){
+  cluster_memberships <- cluster_memberships_hclust
+  cluster_ids <-  cluster_ids_hclust  
+}
+if (profile_with == "kmeans"){
+  cluster_memberships <- cluster_memberships_kmeans
+  cluster_ids <-  cluster_ids_kmeans
+}
+
+# SAVE THE DATA in the cluster file
+NewData = matrix(cluster_memberships,ncol=1)
+write.csv(NewData,file=cluster_file)
+
+population_average = matrix(apply(ProjectData3_segment, 2, mean), ncol=1)
+colnames(population_average) <- "Population"
+Cluster_Profile_mean <- sapply(sort(cluster_ids), function(i) apply(ProjectData3_segment[(cluster_memberships==i), ], 2, mean))
+if (ncol(ProjectData3_segment) <2)
+  Cluster_Profile_mean=t(Cluster_Profile_mean)
+colnames(Cluster_Profile_mean) <- paste("Segment", 1:length(cluster_ids), sep=" ")
+cluster.profile <- cbind (population_average,Cluster_Profile_mean)
+
+knitr::kable(round(cluster.profile, 2))
+```
+
+To get a better picture of the magnitude of the differences, the segments are scaled:
+
+```{r}
+population_average_matrix <- population_average[,"Population",drop=F] %*% matrix(rep(1,ncol(Cluster_Profile_mean)),nrow=1)
+cluster_profile_ratios <- (ifelse(population_average_matrix==0, 0,Cluster_Profile_mean/population_average_matrix-1))
+colnames(cluster_profile_ratios) <- paste("Segment", 1:ncol(cluster_profile_ratios), sep=" ")
+rownames(cluster_profile_ratios) <- colnames(ProjectData3_scaled)
+## printing the result in a clean-slate table
+knitr::kable(round(cluster_profile_ratios, 2))
+```
+
+Although there seems to be some differences between the three segments, after running the Kmeans clustering test numerous times it becomes clear that the segments are not very distinct. In other words, the distance between each segment is not that large. As such, it does not make much sense to segment the URLs based on these factors. 
+
